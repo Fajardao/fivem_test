@@ -6,58 +6,78 @@
 </head>
 <body>
     <script>
-        // --- COLA A TUA CHAVE AQUI DENTRO DAS ASPAS ---
-        const API_KEY = ${{ secrets.API_KEY }}; 
-        // ----------------------------------------------
-
+        // ------------------------------------------------------------------
+        // IMPORTANTE:
+        // O GitHub Action vai substituir "" pela tua chave real.
+        // Não alteres este texto se estiveres a usar o workflow .yml
+        // ------------------------------------------------------------------
+        const API_KEY = ""; 
+        
+        // Listener: Ouve os pedidos do FiveM
         window.addEventListener('message', function(event) {
             const data = event.data;
-            
-            // Recebe o pedido do FiveM
             if (data.action === 'extractPlaylist') {
+                if (API_KEY === "") {
+                    console.error("Erro: A chave API não foi injetada. Verifica o GitHub Action.");
+                    replyError("Erro de Configuração: API Key não substituída.");
+                    return;
+                }
                 fetchPlaylistItems(data.listId);
             }
         });
 
+        // Função que vai ao YouTube buscar a lista
         async function fetchPlaylistItems(playlistId) {
             let videos = [];
-            let nextPageToken = '';
             
-            // Vai buscar até 50 vídeos (limite de uma página da API)
-            // Se quiseres mais, precisas de lógica de paginação, mas 50 chega para FiveM.
+            // URL da API do YouTube
             const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
 
             try {
                 const response = await fetch(url);
                 const result = await response.json();
 
+                // Verifica se o Google devolveu erro
                 if (result.error) {
                     console.error("Erro API:", result.error);
-                    replyError("Erro na API do YouTube (Verifica a Key ou ID)");
+                    
+                    if (result.error.code === 403) {
+                         replyError("Erro 403: Domínio não autorizado ou quota excedida.");
+                    } else if (result.error.code === 404) {
+                         replyError("Erro 404: Playlist não encontrada (ou é Privada).");
+                    } else {
+                         replyError("Erro YouTube: " + result.error.message);
+                    }
                     return;
                 }
 
-                // Processa os itens
-                result.items.forEach(item => {
-                    const snippet = item.snippet;
-                    // Ignora vídeos apagados/privados
-                    if (snippet.title !== "Private video" && snippet.title !== "Deleted video") {
-                        videos.push({
-                            title: snippet.title,
-                            videoId: snippet.resourceId.videoId,
-                            url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`
-                        });
-                    }
-                });
-
-                // Devolve a lista limpa ao FiveM
-                replySuccess(videos);
+                // Processa a lista de vídeos
+                if (result.items) {
+                    result.items.forEach(item => {
+                        const snippet = item.snippet;
+                        // Ignora vídeos que já não existem
+                        if (snippet.title !== "Private video" && snippet.title !== "Deleted video") {
+                            videos.push({
+                                title: snippet.title,
+                                videoId: snippet.resourceId.videoId,
+                                url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`
+                            });
+                        }
+                    });
+                    
+                    // Sucesso: Devolve a lista ao FiveM
+                    replySuccess(videos);
+                } else {
+                    replyError("A playlist parece estar vazia.");
+                }
 
             } catch (error) {
-                replyError("Erro de conexão ao Google.");
+                console.error(error);
+                replyError("Erro de conexão ao YouTube.");
             }
         }
 
+        // Envia sucesso para o pai (FiveM)
         function replySuccess(videoList) {
             window.parent.postMessage({
                 type: 'playlistResults',
@@ -66,6 +86,7 @@
             }, '*');
         }
 
+        // Envia erro para o pai (FiveM)
         function replyError(msg) {
             window.parent.postMessage({
                 type: 'playlistResults',
