@@ -1,0 +1,28 @@
+name: Deploy to GitHub Pages with Secret
+
+on:
+  push:
+    branches:
+      - main  # Ou 'master', confirma o nome da tua branch principal
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🏁
+        uses: actions/checkout@v3
+
+      - name: Injetar a API Key 💉
+        run: |
+          # Este comando procura 'SUBS_KEY_AQUI' no extractor.html 
+          # e substitui pelo valor do teu Secret
+          sed -i "s/SUBS_KEY_AQUI/${{ secrets.API_KEY }}/g" extractor.html
+
+      - name: Deploy para o GitHub Pages 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: . # Publica a pasta raiz
+          branch: gh-pages # Cria/Usa uma branch separada para o site final
