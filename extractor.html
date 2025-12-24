@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Playlist Extractor</title>
+</head>
+<body>
+    <script>
+        // --- COLA A TUA CHAVE AQUI DENTRO DAS ASPAS ---
+        const API_KEY = ${{ secrets.API_KEY }}; 
+        // ----------------------------------------------
+
+        window.addEventListener('message', function(event) {
+            const data = event.data;
+            
+            // Recebe o pedido do FiveM
+            if (data.action === 'extractPlaylist') {
+                fetchPlaylistItems(data.listId);
+            }
+        });
+
+        async function fetchPlaylistItems(playlistId) {
+            let videos = [];
+            let nextPageToken = '';
+            
+            // Vai buscar até 50 vídeos (limite de uma página da API)
+            // Se quiseres mais, precisas de lógica de paginação, mas 50 chega para FiveM.
+            const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
+
+            try {
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.error) {
+                    console.error("Erro API:", result.error);
+                    replyError("Erro na API do YouTube (Verifica a Key ou ID)");
+                    return;
+                }
+
+                // Processa os itens
+                result.items.forEach(item => {
+                    const snippet = item.snippet;
+                    // Ignora vídeos apagados/privados
+                    if (snippet.title !== "Private video" && snippet.title !== "Deleted video") {
+                        videos.push({
+                            title: snippet.title,
+                            videoId: snippet.resourceId.videoId,
+                            url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`
+                        });
+                    }
+                });
+
+                // Devolve a lista limpa ao FiveM
+                replySuccess(videos);
+
+            } catch (error) {
+                replyError("Erro de conexão ao Google.");
+            }
+        }
+
+        function replySuccess(videoList) {
+            window.parent.postMessage({
+                type: 'playlistResults',
+                success: true,
+                videos: videoList
+            }, '*');
+        }
+
+        function replyError(msg) {
+            window.parent.postMessage({
+                type: 'playlistResults',
+                success: false,
+                message: msg
+            }, '*');
+        }
+    </script>
+</body>
+</html>
